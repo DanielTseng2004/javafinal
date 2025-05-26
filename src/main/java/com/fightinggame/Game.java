@@ -11,6 +11,8 @@ import com.fightinggame.network.GameClient;
 import com.fightinggame.network.GameMessage;
 
 import javafx.animation.AnimationTimer;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.geometry.Bounds;
 import javafx.scene.Scene;
@@ -21,12 +23,13 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
+import javafx.util.Duration;
 
 public class Game {
 
     private static final int WINDOW_WIDTH = 800;
     private static final int WINDOW_HEIGHT = 600;
-    private static final Color BACKGROUND_COLOR = Color.BLACK;
+    private static final Color BACKGROUND_COLOR = Color.WHITE;
     private static final double GRAVITY = 0.5;
     private static final double JUMP_FORCE = -15;
     private static final double MOVE_SPEED = 5;
@@ -61,23 +64,29 @@ public class Game {
 
     private void initializeGame() {
         root = new Pane();
-        root.setStyle("-fx-background-color: black;");
+        root.setStyle("-fx-background-color: white;");
 
-        // Initialize players with proper spacing
+        // 創建遊戲區域容器
+        Pane gameArea = new Pane();
+        gameArea.setStyle("-fx-background-color: rgba(255, 255, 255, 0.8);");
+        gameArea.setPrefSize(WINDOW_WIDTH, WINDOW_HEIGHT);
+        root.getChildren().add(gameArea);
+
+        // 初始化玩家
         player1 = new Player(WINDOW_WIDTH * 0.25, WINDOW_HEIGHT - 200, "Player 1");
         player2 = new Player(WINDOW_WIDTH * 0.75, WINDOW_HEIGHT - 200, "Player 2");
-        root.getChildren().addAll(player1.getSprite(), player2.getSprite());
+        gameArea.getChildren().addAll(player1.getSprite(), player2.getSprite());
 
-        // Initialize UI
+        // 初始化UI
         setupUI();
 
-        // Initialize input handling
+        // 初始化輸入處理
         pressedKeys = new HashSet<>();
 
-        // Initialize game loop
+        // 初始化遊戲循環
         setupGameLoop();
 
-        // Connect to server
+        // 連接到服務器
         connectToServer(serverAddress);
     }
 
@@ -90,62 +99,98 @@ public class Game {
     }
 
     private void setupUI() {
-        // Score text
-        scoreText = new Text();
-        scoreText.setFill(Color.WHITE);
-        scoreText.setFont(Font.font("Arial", FontWeight.BOLD, 32));
-        scoreText.setStyle("-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.8), 10, 0, 0, 2);");
-        scoreText.setX((WINDOW_WIDTH - scoreText.getLayoutBounds().getWidth()) / 2);
-        scoreText.setY(50);
-        root.getChildren().add(scoreText);
+        // 創建頂部信息面板
+        Pane topPanel = new Pane();
+        topPanel.setStyle(
+                "-fx-background-color: rgba(255, 255, 255, 0.7);"
+                + "-fx-background-radius: 10;"
+                + "-fx-padding: 10;"
+        );
+        topPanel.setPrefSize(WINDOW_WIDTH, 100);
+        topPanel.setLayoutY(0);
+        root.getChildren().add(topPanel);
 
-        // Game over text
+        // 分數顯示
+        scoreText = new Text();
+        scoreText.setFill(Color.BLACK);
+        scoreText.setFont(Font.font("Arial", FontWeight.BOLD, 32));
+        scoreText.setStyle("-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 10, 0, 0, 2);");
+        scoreText.setText("Player 1: 0 - Player 2: 0"); // 設置初始文字
+        scoreText.setX((WINDOW_WIDTH - scoreText.getLayoutBounds().getWidth()) / 2);
+        scoreText.setY(40);
+        topPanel.getChildren().add(scoreText);
+
+        // 血條容器
+        Pane healthBarsContainer = new Pane();
+        healthBarsContainer.setLayoutY(60);
+        healthBarsContainer.setPrefSize(WINDOW_WIDTH, 30);
+        topPanel.getChildren().add(healthBarsContainer);
+
+        // 玩家1血條（藍色）
+        player1HealthBar = new ProgressBar(1.0);
+        player1HealthBar.setLayoutX(10);
+        player1HealthBar.setLayoutY(0);
+        player1HealthBar.setPrefWidth(200);
+        player1HealthBar.setPrefHeight(20);
+        player1HealthBar.setStyle(
+                "-fx-accent: blue;"
+                + "-fx-background-color: rgba(0,0,0,0.1);"
+                + "-fx-background-radius: 5;"
+                + "-fx-background-insets: 0;"
+                + "-fx-padding: 2;"
+                + "-fx-effect: dropshadow(gaussian, rgba(0,0,255,0.5), 5, 0, 0, 1);"
+        );
+        healthBarsContainer.getChildren().add(player1HealthBar);
+
+        // 玩家2血條（紅色）
+        player2HealthBar = new ProgressBar(1.0);
+        player2HealthBar.setLayoutX(WINDOW_WIDTH - 210);
+        player2HealthBar.setLayoutY(0);
+        player2HealthBar.setPrefWidth(200);
+        player2HealthBar.setPrefHeight(20);
+        player2HealthBar.setStyle(
+                "-fx-accent: red;"
+                + "-fx-background-color: rgba(0,0,0,0.1);"
+                + "-fx-background-radius: 5;"
+                + "-fx-background-insets: 0;"
+                + "-fx-padding: 2;"
+                + "-fx-effect: dropshadow(gaussian, rgba(255,0,0,0.5), 5, 0, 0, 1);"
+        );
+        healthBarsContainer.getChildren().add(player2HealthBar);
+
+        // 遊戲結束文字
         gameOverText = new Text();
-        gameOverText.setFill(Color.RED);
+        gameOverText.setFill(Color.BLACK);
         gameOverText.setFont(Font.font("Arial", FontWeight.BOLD, 48));
-        gameOverText.setStyle("-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.8), 10, 0, 0, 2);");
+        gameOverText.setStyle(
+                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 10, 0, 0, 2);"
+                + "-fx-fill: linear-gradient(to bottom, #000000, #333333);"
+        );
         gameOverText.setVisible(false);
         root.getChildren().add(gameOverText);
 
-        // Connection status
+        // 連接狀態
         connectionStatusText = new Text();
-        connectionStatusText.setFill(Color.WHITE);
+        connectionStatusText.setFill(Color.BLACK);
         connectionStatusText.setFont(Font.font("Arial", 14));
-        connectionStatusText.setStyle("-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.8), 5, 0, 0, 1);");
+        connectionStatusText.setStyle("-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 5, 0, 0, 1);");
         connectionStatusText.setX(10);
         connectionStatusText.setY(WINDOW_HEIGHT - 20);
         root.getChildren().add(connectionStatusText);
 
-        // Health bars with enhanced styling
-        player1HealthBar = new ProgressBar(1.0);
-        player1HealthBar.setLayoutX(10);
-        player1HealthBar.setLayoutY(50);
-        player1HealthBar.setPrefWidth(200);
-        player1HealthBar.setPrefHeight(20);
-        player1HealthBar.setStyle(
-            "-fx-accent: red;" +
-            "-fx-background-color: rgba(0,0,0,0.5);" +
-            "-fx-background-radius: 5;" +
-            "-fx-background-insets: 0;" +
-            "-fx-padding: 2;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 5, 0, 0, 1);"
+        // 添加控制說明
+        Text controlsText = new Text(
+                "Controls:\n"
+                + "Player 1 (Blue): WASD to move, SPACE to attack\n"
+                + "Player 2 (Red): Arrow keys to move, ENTER to attack\n"
+                + "F12: Toggle attack range visibility"
         );
-
-        player2HealthBar = new ProgressBar(1.0);
-        player2HealthBar.setLayoutX(WINDOW_WIDTH - 210);
-        player2HealthBar.setLayoutY(50);
-        player2HealthBar.setPrefWidth(200);
-        player2HealthBar.setPrefHeight(20);
-        player2HealthBar.setStyle(
-            "-fx-accent: blue;" +
-            "-fx-background-color: rgba(0,0,0,0.5);" +
-            "-fx-background-radius: 5;" +
-            "-fx-background-insets: 0;" +
-            "-fx-padding: 2;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 5, 0, 0, 1);"
-        );
-
-        root.getChildren().addAll(player1HealthBar, player2HealthBar);
+        controlsText.setFill(Color.BLACK);
+        controlsText.setFont(Font.font("Arial", 12));
+        controlsText.setStyle("-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 5, 0, 0, 1);");
+        controlsText.setX(WINDOW_WIDTH - 300);
+        controlsText.setY(WINDOW_HEIGHT - 80);
+        root.getChildren().add(controlsText);
     }
 
     public void setupInputHandling(Scene scene) {
@@ -293,40 +338,59 @@ public class Game {
         if (attacker.isAttacking()) {
             Bounds attackBounds = attacker.getAttackBounds();
             Bounds defenderBounds = defender.getBounds();
-            
-            System.out.println("檢查攻擊碰撞 - 攻擊者：" + attacker.getName() + 
-                " 攻擊框：" + attackBounds + 
-                " 防禦者：" + defender.getName() + 
-                " 位置：" + defenderBounds);
-            
+
+            System.out.println("=== 攻擊碰撞檢測 ===");
+            System.out.println("攻擊者：" + attacker.getName() + " 正在攻擊");
+            System.out.println("攻擊框範圍："
+                    + String.format("X: %.1f-%.1f, Y: %.1f-%.1f",
+                            attackBounds.getMinX(), attackBounds.getMaxX(),
+                            attackBounds.getMinY(), attackBounds.getMaxY()));
+            System.out.println("防禦者：" + defender.getName());
+            System.out.println("防禦者範圍："
+                    + String.format("X: %.1f-%.1f, Y: %.1f-%.1f",
+                            defenderBounds.getMinX(), defenderBounds.getMaxX(),
+                            defenderBounds.getMinY(), defenderBounds.getMaxY()));
+
             // 檢查攻擊框和防禦者是否相交
-            if (attackBounds.intersects(defenderBounds)) {
-                // 本地攻擊判定，僅限控制的玩家
-                if ((isHost && attacker == player1) || (!isHost && attacker == player2)) {
+            boolean intersects = attackBounds.intersects(defenderBounds);
+            System.out.println("是否相交：" + intersects);
+
+            if (intersects) {
+                System.out.println("*** 攻擊命中！***");
+
+                // 檢查是否為本地控制的玩家
+                boolean isLocalPlayer = (isHost && attacker == player1) || (!isHost && attacker == player2);
+                System.out.println("是否為本地玩家攻擊：" + isLocalPlayer);
+
+                if (isLocalPlayer) {
                     // 更新命中次數
                     if (attacker == player1) {
                         player1Hits++;
-                        System.out.println("Player 1 命中！當前分數：" + player1Hits);
+                        System.out.println("Player 1 分數更新：" + player1Hits);
                     } else {
                         player2Hits++;
-                        System.out.println("Player 2 命中！當前分數：" + player2Hits);
+                        System.out.println("Player 2 分數更新：" + player2Hits);
                     }
-                    
+
                     // 立即更新UI
                     Platform.runLater(() -> {
                         updateScore();
+                        updateHealthBars();
                         checkGameOver();
                     });
-                    
-                    // 發送攻擊消息
-                    GameMessage attackMsg = new GameMessage(
-                            GameMessage.MessageType.PLAYER_ATTACK,
-                            1, // 傷害值改為1
-                            attacker == player1 ? 1 : 2
-                    );
-                    gameClient.sendMessage(attackMsg);
+
+                    // 發送網路同步消息
+                    if (gameClient != null && gameClient.isConnected()) {
+                        GameMessage scoreMessage = new GameMessage(
+                                GameMessage.MessageType.GAME_STATE,
+                                new int[]{player1Hits, player2Hits},
+                                isHost ? 1 : 2
+                        );
+                        gameClient.sendMessage(scoreMessage);
+                    }
                 }
             }
+            System.out.println("===================");
         }
     }
 
@@ -337,7 +401,7 @@ public class Game {
                 handleInput(key);
             }
 
-            // 同步位置
+            // 同步位置和狀態
             if (isHost) {
                 sendPositionUpdate(player1);
             } else {
@@ -368,6 +432,11 @@ public class Game {
         updateScore();
         updateHealthBars();
         checkGameOver();
+        Platform.runLater(() -> {
+            updateScore();
+            updateHealthBars();
+            checkGameOver();
+        });
     }
 
     private void checkGroundCollision(Player player) {
@@ -396,6 +465,9 @@ public class Game {
                     case PLAYER_DAMAGE:
                         handleDamageUpdate(message);
                         break;
+                    case GAME_STATE:
+                        handleGameStateUpdate(message);
+                        break;
                 }
             } catch (Exception e) {
                 System.out.println("Error processing message: " + e.getMessage());
@@ -408,7 +480,12 @@ public class Game {
             return;
         }
 
-        double[] position = {player.getX(), player.getY()};
+        // 發送位置和狀態信息
+        double[] position = {
+            player.getX(),
+            player.getY(),
+            player.isAttacking() ? 1 : 0 // 添加攻擊狀態
+        };
         GameMessage message = new GameMessage(
                 GameMessage.MessageType.PLAYER_POSITION,
                 position,
@@ -422,9 +499,11 @@ public class Game {
             return;
         }
 
+        // 發送攻擊消息，包含攻擊者的位置信息
+        double[] position = {player.getX(), player.getY()};
         GameMessage message = new GameMessage(
                 GameMessage.MessageType.PLAYER_ATTACK,
-                null,
+                position, // 發送位置信息
                 player == player1 ? 1 : 2
         );
         gameClient.sendMessage(message);
@@ -435,8 +514,15 @@ public class Game {
         Player targetPlayer = message.getPlayerId() == 1 ? player1 : player2;
 
         if ((isHost && message.getPlayerId() == 2) || (!isHost && message.getPlayerId() == 1)) {
-            targetPlayer.setX(position[0]);
-            targetPlayer.setY(position[1]);
+            Platform.runLater(() -> {
+                targetPlayer.setX(position[0]);
+                targetPlayer.setY(position[1]);
+
+                // 如果有攻擊狀態信息，更新攻擊狀態
+                if (position.length > 2 && position[2] == 1) {
+                    targetPlayer.attack();
+                }
+            });
         }
     }
 
@@ -444,45 +530,55 @@ public class Game {
         Player attacker = message.getPlayerId() == 1 ? player1 : player2;
         Player target = message.getPlayerId() == 1 ? player2 : player1;
 
-        // 強制更新位置，確保攻擊判定使用最新位置
-        attacker.attack();
+        Platform.runLater(() -> {
+            // 強制更新位置，確保攻擊判定使用最新位置
+            attacker.attack();
 
-        // 獲取正確的攻擊範圍和目標範圍
-        Bounds attackBounds = attacker.getAttackBounds();
-        Bounds targetBounds = target.getBounds();
+            // 獲取正確的攻擊範圍和目標範圍
+            Bounds attackBounds = attacker.getAttackBounds();
+            Bounds targetBounds = target.getBounds();
 
-        System.out.println("處理攻擊更新 - 攻擊者：" + attacker.getName() + 
-            " 攻擊框：" + attackBounds + 
-            " 目標：" + target.getName() + 
-            " 位置：" + targetBounds);
+            System.out.println("處理攻擊更新 - 攻擊者：" + attacker.getName()
+                    + " 攻擊框：" + attackBounds
+                    + " 目標：" + target.getName()
+                    + " 位置：" + targetBounds);
 
-        // 檢查碰撞
-        if (attackBounds.intersects(targetBounds)) {
-            System.out.println("攻擊命中！");
+            // 檢查碰撞
+            if (attackBounds.intersects(targetBounds)) {
+                System.out.println("攻擊命中！");
 
-            // 更新命中次數
-            if (message.getPlayerId() == 1) {
-                player1Hits++;
-                System.out.println("Player 1 命中！當前分數：" + player1Hits);
-            } else {
-                player2Hits++;
-                System.out.println("Player 2 命中！當前分數：" + player2Hits);
+                // 更新命中次數
+                if (message.getPlayerId() == 1) {
+                    player1Hits++;
+                    System.out.println("Player 1 命中！當前分數：" + player1Hits);
+                } else {
+                    player2Hits++;
+                    System.out.println("Player 2 命中！當前分數：" + player2Hits);
+                }
+
+                // 立即更新UI和同步到後端
+                Platform.runLater(() -> {
+                    updateScore();
+                    checkGameOver();
+
+                    // 發送分數更新到後端
+                    GameMessage scoreMessage = new GameMessage(
+                            GameMessage.MessageType.GAME_STATE,
+                            new int[]{player1Hits, player2Hits},
+                            isHost ? 1 : 2
+                    );
+                    gameClient.sendMessage(scoreMessage);
+                });
+
+                // 發送傷害同步消息
+                GameMessage damageMessage = new GameMessage(
+                        GameMessage.MessageType.PLAYER_DAMAGE,
+                        1, // 傷害值改為1
+                        target == player1 ? 1 : 2 // 標記受傷的玩家ID
+                );
+                gameClient.sendMessage(damageMessage);
             }
-            
-            // 立即更新UI
-            Platform.runLater(() -> {
-                updateScore();
-                checkGameOver();
-            });
-            
-            // 發送傷害同步消息
-            GameMessage damageMessage = new GameMessage(
-                    GameMessage.MessageType.PLAYER_DAMAGE,
-                    1, // 傷害值改為1
-                    target == player1 ? 1 : 2 // 標記受傷的玩家ID
-            );
-            gameClient.sendMessage(damageMessage);
-        }
+        });
     }
 
     private void handleDamageUpdate(GameMessage message) {
@@ -493,7 +589,7 @@ public class Game {
 
         // 根據消息中的玩家ID來確定誰受傷
         Player targetPlayer = targetPlayerId == 1 ? player1 : player2;
-        
+
         // 應用傷害
         targetPlayer.takeDamage(damage);
 
@@ -505,20 +601,38 @@ public class Game {
         });
     }
 
-    private void updateScore() {
+    private void handleGameStateUpdate(GameMessage message) {
+        int[] scores = (int[]) message.getData();
         Platform.runLater(() -> {
-            // 更新分數顯示
-            scoreText.setText(String.format("%s: %d - %s: %d",
-                    player1.getName(), player1Hits,
-                    player2.getName(), player2Hits));
-            
-            // 更新分數板位置
-            scoreText.setX((WINDOW_WIDTH - scoreText.getLayoutBounds().getWidth()) / 2);
-            scoreText.setY(50);
-            
-            System.out.println("更新分數 - " + player1.getName() + ": " + player1Hits + 
-                " - " + player2.getName() + ": " + player2Hits);
+            // 只在收到對方玩家的分數更新時更新
+            if ((isHost && message.getPlayerId() == 2) || (!isHost && message.getPlayerId() == 1)) {
+                player1Hits = scores[0];
+                player2Hits = scores[1];
+                updateScore();
+                updateHealthBars();
+                checkGameOver();
+                System.out.println("收到分數更新 - Player 1: " + player1Hits + ", Player 2: " + player2Hits);
+            }
         });
+    }
+
+    private void updateScore() {
+        // 直接在UI線程中更新，不需要再套Platform.runLater
+        String scoreString = String.format("%s: %d - %s: %d",
+                player1.getName(), player1Hits,
+                player2.getName(), player2Hits);
+
+        scoreText.setText(scoreString);
+
+        // 使用Timeline來確保文字尺寸計算完成後再調整位置
+        Timeline positionUpdate = new Timeline(new KeyFrame(Duration.millis(50), e -> {
+            double textWidth = scoreText.getBoundsInLocal().getWidth();
+            scoreText.setX((WINDOW_WIDTH - textWidth) / 2);
+        }));
+        positionUpdate.play();
+
+        System.out.println("更新分數 - " + player1.getName() + ": " + player1Hits
+                + " - " + player2.getName() + ": " + player2Hits);
     }
 
     private void updateHealthBars() {
@@ -532,40 +646,40 @@ public class Game {
             // 根據血量改變顏色和效果
             if (p1Health < 0.3) {
                 player1HealthBar.setStyle(
-                    "-fx-accent: darkred;" +
-                    "-fx-background-color: rgba(0,0,0,0.5);" +
-                    "-fx-background-radius: 5;" +
-                    "-fx-background-insets: 0;" +
-                    "-fx-padding: 2;" +
-                    "-fx-effect: dropshadow(gaussian, rgba(255,0,0,0.3), 10, 0, 0, 2);"
+                        "-fx-accent: darkblue;"
+                        + "-fx-background-color: rgba(0,0,0,0.5);"
+                        + "-fx-background-radius: 5;"
+                        + "-fx-background-insets: 0;"
+                        + "-fx-padding: 2;"
+                        + "-fx-effect: dropshadow(gaussian, rgba(0,0,255,0.3), 10, 0, 0, 2);"
                 );
             } else {
                 player1HealthBar.setStyle(
-                    "-fx-accent: red;" +
-                    "-fx-background-color: rgba(0,0,0,0.5);" +
-                    "-fx-background-radius: 5;" +
-                    "-fx-background-insets: 0;" +
-                    "-fx-padding: 2;" +
-                    "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 5, 0, 0, 1);"
+                        "-fx-accent: blue;"
+                        + "-fx-background-color: rgba(0,0,0,0.5);"
+                        + "-fx-background-radius: 5;"
+                        + "-fx-background-insets: 0;"
+                        + "-fx-padding: 2;"
+                        + "-fx-effect: dropshadow(gaussian, rgba(0,0,255,0.5), 5, 0, 0, 1);"
                 );
             }
             if (p2Health < 0.3) {
                 player2HealthBar.setStyle(
-                    "-fx-accent: darkblue;" +
-                    "-fx-background-color: rgba(0,0,0,0.5);" +
-                    "-fx-background-radius: 5;" +
-                    "-fx-background-insets: 0;" +
-                    "-fx-padding: 2;" +
-                    "-fx-effect: dropshadow(gaussian, rgba(0,0,255,0.3), 10, 0, 0, 2);"
+                        "-fx-accent: darkred;"
+                        + "-fx-background-color: rgba(0,0,0,0.5);"
+                        + "-fx-background-radius: 5;"
+                        + "-fx-background-insets: 0;"
+                        + "-fx-padding: 2;"
+                        + "-fx-effect: dropshadow(gaussian, rgba(255,0,0,0.3), 10, 0, 0, 2);"
                 );
             } else {
                 player2HealthBar.setStyle(
-                    "-fx-accent: blue;" +
-                    "-fx-background-color: rgba(0,0,0,0.5);" +
-                    "-fx-background-radius: 5;" +
-                    "-fx-background-insets: 0;" +
-                    "-fx-padding: 2;" +
-                    "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 5, 0, 0, 1);"
+                        "-fx-accent: red;"
+                        + "-fx-background-color: rgba(0,0,0,0.5);"
+                        + "-fx-background-radius: 5;"
+                        + "-fx-background-insets: 0;"
+                        + "-fx-padding: 2;"
+                        + "-fx-effect: dropshadow(gaussian, rgba(255,0,0,0.5), 5, 0, 0, 1);"
                 );
             }
         });
@@ -578,15 +692,23 @@ public class Game {
             gameOverText.setX((WINDOW_WIDTH - gameOverText.getLayoutBounds().getWidth()) / 2);
             gameOverText.setY(WINDOW_HEIGHT / 2);
             gameOverText.setVisible(true);
-            
+
             // 添加獲勝特效
             gameOverText.setStyle(
-                "-fx-fill: linear-gradient(to bottom, #ff0000, #ff6666);" +
-                "-fx-effect: dropshadow(gaussian, rgba(255,0,0,0.5), 20, 0, 0, 2);" +
-                "-fx-font-size: 48px;" +
-                "-fx-font-weight: bold;"
+                    "-fx-fill: linear-gradient(to bottom, #000000, #333333);"
+                    + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 20, 0, 0, 2);"
+                    + "-fx-font-size: 48px;"
+                    + "-fx-font-weight: bold;"
             );
-            
+
+            // 發送遊戲結束消息
+            GameMessage gameOverMessage = new GameMessage(
+                    GameMessage.MessageType.GAME_STATE,
+                    new int[]{player1Hits, player2Hits},
+                    isHost ? 1 : 2
+            );
+            gameClient.sendMessage(gameOverMessage);
+
             gameLoop.stop();
             System.out.println("遊戲結束！獲勝者：" + winner);
         }
