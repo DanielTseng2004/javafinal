@@ -1,6 +1,7 @@
 package com.fightinggame;
 
 import javafx.animation.Animation;
+import javafx.animation.AnimationTimer;
 import javafx.animation.KeyFrame;
 import javafx.animation.RotateTransition;
 import javafx.animation.Timeline;
@@ -39,12 +40,16 @@ public class Player {
     private long lastAttackTime = 0;
     private Rectangle attackBox;
     private Group visualGroup; // Contains sprite and attack box
+    private AnimationTimer attackAnimationTimer;
+    private int attackCooldown = 0;
 
     public Player(double x, double y, String name) {
         this.name = name;
         this.health = MAX_HEALTH;
         this.velocityY = 0;
         this.onGround = false;
+        this.isAttacking = false;
+        this.attackCooldown = 0;
         
         // Initialize parent group for all visual elements
         visualGroup = new Group();
@@ -58,9 +63,13 @@ public class Player {
         // 初始化攻擊判定框
         this.attackBox = new Rectangle(40, 30);
         this.attackBox.setFill(Color.TRANSPARENT);
-        this.attackBox.setStroke(Color.RED);
-        this.attackBox.setStrokeWidth(1.5);
-        this.attackBox.setOpacity(0.7);
+        this.attackBox.setStroke(Color.YELLOW);
+        this.attackBox.setStrokeWidth(2);
+        this.attackBox.setStyle(
+            "-fx-stroke: linear-gradient(to bottom, #ffff00, #ffcc00);" +
+            "-fx-stroke-width: 2;" +
+            "-fx-effect: dropshadow(gaussian, rgba(255,255,0,0.5), 5, 0, 0, 1);"
+        );
         this.attackBox.setVisible(false);
         
         // Position attack box relative to sprite
@@ -71,6 +80,18 @@ public class Player {
         visualGroup.getChildren().addAll(sprite, attackBox);
         visualGroup.setLayoutX(x);
         visualGroup.setLayoutY(y);
+
+        // 設置攻擊動畫 - 只旋轉右手臂
+        attackAnimation = new RotateTransition(Duration.millis(200), rightArm);
+        attackAnimation.setFromAngle(0);
+        attackAnimation.setToAngle(90);
+        attackAnimation.setAutoReverse(true);
+        attackAnimation.setCycleCount(1);
+        attackAnimation.setOnFinished(event -> {
+            isAttacking = false;
+            attackBox.setVisible(false);
+            rightArm.setRotate(0); // 重置手臂角度
+        });
     }
 
     private void createStickFigure() {
@@ -129,18 +150,6 @@ public class Player {
             })
         );
         walkingAnimation.setCycleCount(Animation.INDEFINITE);
-
-        // Attack animation - synchronized with attack box
-        attackAnimation = new RotateTransition(Duration.millis(200), rightArm);
-        attackAnimation.setFromAngle(0);
-        attackAnimation.setToAngle(90);
-        attackAnimation.setAutoReverse(true);
-        attackAnimation.setCycleCount(2);
-        attackAnimation.setOnFinished(e -> {
-            isAttacking = false;
-            rightArm.setRotate(0);
-            attackBox.setVisible(false);
-        });
 
         // Damage animation - improved with color flash and movement
         damageAnimation = new Timeline(
@@ -234,38 +243,45 @@ public class Player {
         visualGroup.setLayoutY(visualGroup.getLayoutY() + velocityY);
     }
 
+    public void update() {
+        // 更新攻擊冷卻
+        if (attackCooldown > 0) {
+            attackCooldown -= 16; // 假設60FPS，每幀約16ms
+        }
+    }
+
     public void attack() {
-        long currentTime = System.currentTimeMillis();
-        if (currentTime - lastAttackTime >= ATTACK_COOLDOWN && !isAttacking) {
+        if (attackCooldown <= 0) {
             isAttacking = true;
-            lastAttackTime = currentTime;
+            attackBox.setVisible(true);
+            attackCooldown = ATTACK_COOLDOWN;
             
             // 根據角色朝向調整攻擊框位置
-            if (sprite.getScaleX() > 0) {
-                attackBox.setX(30); // 向右攻擊
-            } else {
-                attackBox.setX(-70); // 向左攻擊
+            if (sprite.getScaleX() < 0) { // 面向左
+                attackBox.setX(-70); // 向左偏移
+            } else { // 面向右
+                attackBox.setX(30); // 向右偏移
             }
             
-            // 顯示攻擊判定框
-            attackBox.setVisible(true);
+            // 確保攻擊框在正確的位置
+            attackBox.setY(0);
             
             // 播放攻擊動畫
+            attackAnimation.stop();
             attackAnimation.play();
             
-            // 創建一個新的線程來處理攻擊判定的時間
+            System.out.println(name + " 發動攻擊！攻擊框位置：" + attackBox.getX() + ", " + attackBox.getY());
+            
+            // 設置一個計時器來重置攻擊狀態
             new Thread(() -> {
                 try {
-                    // 攻擊持續時間
-                    Thread.sleep(200);
-                    
-                    // 使用 Platform.runLater 確保在 JavaFX 線程中更新 UI
+                    Thread.sleep(200); // 與攻擊動畫持續時間相同
                     Platform.runLater(() -> {
                         isAttacking = false;
                         attackBox.setVisible(false);
                     });
                 } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
+                    e.printStackTrace();
                 }
             }).start();
         }
@@ -279,20 +295,24 @@ public class Player {
         // 如果生命值確實發生了變化，才播放動畫
         if (oldHealth != health) {
             System.out.println(name + " 受到 " + damage + " 點傷害！剩餘生命值：" + health);
-            damageAnimation.playFromStart();
             
-            // 根據血量不同顯示不同視覺效果
-            if (health <= 30) {
-                sprite.setOpacity(0.7);
-            }
-            if (health <= 0) {
-                sprite.setOpacity(0.5);
-                // 添加死亡特效
-                leftLeg.setRotate(45);
-                rightLeg.setRotate(-45);
-                leftArm.setRotate(30);
-                rightArm.setRotate(-30);
-            }
+            // 在 JavaFX 線程中執行動畫
+            Platform.runLater(() -> {
+                damageAnimation.playFromStart();
+                
+                // 根據血量不同顯示不同視覺效果
+                if (health <= 30) {
+                    sprite.setOpacity(0.7);
+                }
+                if (health <= 0) {
+                    sprite.setOpacity(0.5);
+                    // 添加死亡特效
+                    leftLeg.setRotate(45);
+                    rightLeg.setRotate(-45);
+                    leftArm.setRotate(30);
+                    rightArm.setRotate(-30);
+                }
+            });
         }
     }
 
@@ -321,6 +341,7 @@ public class Player {
     }
 
     public Bounds getBounds() {
+        // 獲取角色在父節點坐標系中的邊界
         return sprite.getBoundsInParent();
     }
 
@@ -341,15 +362,39 @@ public class Player {
     }
 
     public Bounds getAttackBounds() {
-        // 獲取攻擊框在父容器坐標系中的邊界，考慮角色的朝向
+        // 獲取攻擊框在本地坐標系中的邊界
         Bounds localBounds = attackBox.getBoundsInLocal();
-        if (sprite.getScaleX() < 0) {
-            // 如果角色朝左，調整攻擊框的位置
-            localBounds = attackBox.localToParent(localBounds);
+        
+        // 轉換到父節點坐標系
+        Bounds bounds = attackBox.localToParent(localBounds);
+        
+        // 根據角色朝向調整攻擊框位置
+        if (sprite.getScaleX() < 0) { // 面向左
+            attackBox.setX(-70); // 向左偏移
+        } else { // 面向右
+            attackBox.setX(30); // 向右偏移
         }
-        return localBounds;
+        
+        // 確保攻擊框在正確的位置
+        attackBox.setY(0); // 與角色頂部對齊
+        
+        // 輸出攻擊框的實際位置和大小
+        System.out.println(name + " 攻擊框 - 位置：" + bounds.getMinX() + ", " + bounds.getMinY() + 
+            " 大小：" + bounds.getWidth() + "x" + bounds.getHeight());
+        
+        return bounds;
     }
     public void showAttackBounds(boolean show) {
         attackBox.setVisible(show);
+        if (show) {
+            // 當顯示攻擊範圍時，添加閃爍效果
+            Timeline flashTimeline = new Timeline(
+                new KeyFrame(Duration.millis(0), e -> attackBox.setOpacity(1.0)),
+                new KeyFrame(Duration.millis(500), e -> attackBox.setOpacity(0.5)),
+                new KeyFrame(Duration.millis(1000), e -> attackBox.setOpacity(1.0))
+            );
+            flashTimeline.setCycleCount(Timeline.INDEFINITE);
+            flashTimeline.play();
+        }
     }
 }
