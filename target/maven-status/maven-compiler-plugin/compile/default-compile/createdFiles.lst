@@ -1,0 +1,13 @@
+com\fightinggame\Game.class
+com\fightinggame\GameController.class
+com\fightinggame\Game$2.class
+com\fightinggame\network\GameServer$ClientHandler.class
+com\fightinggame\GameController$1.class
+com\fightinggame\network\GameClient.class
+com\fightinggame\network\GameMessage.class
+com\fightinggame\GameLauncher.class
+com\fightinggame\GameController$2.class
+com\fightinggame\network\GameServer.class
+com\fightinggame\Game$1.class
+com\fightinggame\network\GameMessage$MessageType.class
+com\fightinggame\Player.class
