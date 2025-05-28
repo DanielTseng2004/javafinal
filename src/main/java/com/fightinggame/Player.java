@@ -19,7 +19,6 @@ public class Player {
     private Group sprite;
     private double velocityY;
     private boolean onGround;
-    private int health;
     private String name;
     private static final int PLAYER_WIDTH = 30;
     private static final int PLAYER_HEIGHT = 60;
@@ -49,7 +48,6 @@ public class Player {
 
     public Player(double x, double y, String name) {
         this.name = name;
-        this.health = MAX_HEALTH;
         this.velocityY = 0;
         this.onGround = false;
         this.isAttacking = false;
@@ -371,31 +369,10 @@ public class Player {
     }
 
     public void takeDamage(int damage) {
-        int oldHealth = health;
-        health = Math.max(0, health - damage);
-
-        // 如果生命值確實發生了變化，才播放動畫
-        if (oldHealth != health) {
-            System.out.println(name + " 受到 " + damage + " 點傷害！剩餘生命值：" + health);
-
-            // 在 JavaFX 線程中執行動畫
-            Platform.runLater(() -> {
-                damageAnimation.playFromStart();
-
-                // 根據血量不同顯示不同視覺效果
-                if (health <= 30) {
-                    sprite.setOpacity(0.7);
-                }
-                if (health <= 0) {
-                    sprite.setOpacity(0.5);
-                    // 添加死亡特效
-                    leftLeg.setRotate(45);
-                    rightLeg.setRotate(-45);
-                    leftArm.setRotate(30);
-                    rightArm.setRotate(-30);
-                }
-            });
-        }
+        // 播放受傷動畫
+        Platform.runLater(() -> {
+            damageAnimation.playFromStart();
+        });
     }
 
     public double getX() {
@@ -433,7 +410,7 @@ public class Player {
     }
 
     public int getHealth() {
-        return health;
+        return MAX_HEALTH;
     }
 
     public String getName() {

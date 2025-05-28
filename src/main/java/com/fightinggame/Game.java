@@ -16,7 +16,6 @@ import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.geometry.Bounds;
 import javafx.scene.Scene;
-import javafx.scene.control.ProgressBar;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
@@ -46,8 +45,6 @@ public class Game {
     private Text scoreText;
     private Text gameOverText;
     private Text connectionStatusText;
-    private ProgressBar player1HealthBar;
-    private ProgressBar player2HealthBar;
     private ScheduledExecutorService reconnectExecutor;
     private int reconnectAttempts = 0;
     private String serverAddress;
@@ -106,7 +103,7 @@ public class Game {
                 + "-fx-background-radius: 10;"
                 + "-fx-padding: 10;"
         );
-        topPanel.setPrefSize(WINDOW_WIDTH, 100);
+        topPanel.setPrefSize(WINDOW_WIDTH, 50);
         topPanel.setLayoutY(0);
         root.getChildren().add(topPanel);
 
@@ -119,44 +116,6 @@ public class Game {
         scoreText.setX((WINDOW_WIDTH - scoreText.getLayoutBounds().getWidth()) / 2);
         scoreText.setY(40);
         topPanel.getChildren().add(scoreText);
-
-        // 血條容器
-        Pane healthBarsContainer = new Pane();
-        healthBarsContainer.setLayoutY(60);
-        healthBarsContainer.setPrefSize(WINDOW_WIDTH, 30);
-        topPanel.getChildren().add(healthBarsContainer);
-
-        // 玩家1血條（藍色）
-        player1HealthBar = new ProgressBar(1.0);
-        player1HealthBar.setLayoutX(10);
-        player1HealthBar.setLayoutY(0);
-        player1HealthBar.setPrefWidth(200);
-        player1HealthBar.setPrefHeight(20);
-        player1HealthBar.setStyle(
-                "-fx-accent: blue;"
-                + "-fx-background-color: rgba(0,0,0,0.1);"
-                + "-fx-background-radius: 5;"
-                + "-fx-background-insets: 0;"
-                + "-fx-padding: 2;"
-                + "-fx-effect: dropshadow(gaussian, rgba(0,0,255,0.5), 5, 0, 0, 1);"
-        );
-        healthBarsContainer.getChildren().add(player1HealthBar);
-
-        // 玩家2血條（紅色）
-        player2HealthBar = new ProgressBar(1.0);
-        player2HealthBar.setLayoutX(WINDOW_WIDTH - 210);
-        player2HealthBar.setLayoutY(0);
-        player2HealthBar.setPrefWidth(200);
-        player2HealthBar.setPrefHeight(20);
-        player2HealthBar.setStyle(
-                "-fx-accent: red;"
-                + "-fx-background-color: rgba(0,0,0,0.1);"
-                + "-fx-background-radius: 5;"
-                + "-fx-background-insets: 0;"
-                + "-fx-padding: 2;"
-                + "-fx-effect: dropshadow(gaussian, rgba(255,0,0,0.5), 5, 0, 0, 1);"
-        );
-        healthBarsContainer.getChildren().add(player2HealthBar);
 
         // 遊戲結束文字
         gameOverText = new Text();
@@ -363,19 +322,18 @@ public class Game {
                 System.out.println("是否為本地玩家攻擊：" + isLocalPlayer);
 
                 if (isLocalPlayer) {
-                    // 更新命中次數
+                    // 更新命中次數，每次只加一分
                     if (attacker == player1) {
                         player1Hits++;
-                        System.out.println("Player 1 分數更新：" + player1Hits);
+                        System.out.println("Player 1 得分！當前分數：" + player1Hits);
                     } else {
                         player2Hits++;
-                        System.out.println("Player 2 分數更新：" + player2Hits);
+                        System.out.println("Player 2 得分！當前分數：" + player2Hits);
                     }
 
                     // 立即更新UI
                     Platform.runLater(() -> {
                         updateScore();
-                        updateHealthBars();
                         checkGameOver();
                     });
 
@@ -430,11 +388,9 @@ public class Game {
 
         processNetworkMessages();
         updateScore();
-        updateHealthBars();
         checkGameOver();
         Platform.runLater(() -> {
             updateScore();
-            updateHealthBars();
             checkGameOver();
         });
     }
@@ -547,13 +503,13 @@ public class Game {
             if (attackBounds.intersects(targetBounds)) {
                 System.out.println("攻擊命中！");
 
-                // 更新命中次數
+                // 更新命中次數，每次只加一分
                 if (message.getPlayerId() == 1) {
                     player1Hits++;
-                    System.out.println("Player 1 命中！當前分數：" + player1Hits);
+                    System.out.println("Player 1 得分！當前分數：" + player1Hits);
                 } else {
                     player2Hits++;
-                    System.out.println("Player 2 命中！當前分數：" + player2Hits);
+                    System.out.println("Player 2 得分！當前分數：" + player2Hits);
                 }
 
                 // 立即更新UI和同步到後端
@@ -573,7 +529,7 @@ public class Game {
                 // 發送傷害同步消息
                 GameMessage damageMessage = new GameMessage(
                         GameMessage.MessageType.PLAYER_DAMAGE,
-                        1, // 傷害值改為1
+                        1, // 傷害值固定為1
                         target == player1 ? 1 : 2 // 標記受傷的玩家ID
                 );
                 gameClient.sendMessage(damageMessage);
@@ -595,7 +551,6 @@ public class Game {
 
         // 立即更新UI
         Platform.runLater(() -> {
-            updateHealthBars();
             updateScore();
             checkGameOver();
         });
@@ -609,7 +564,6 @@ public class Game {
                 player1Hits = scores[0];
                 player2Hits = scores[1];
                 updateScore();
-                updateHealthBars();
                 checkGameOver();
                 System.out.println("收到分數更新 - Player 1: " + player1Hits + ", Player 2: " + player2Hits);
             }
@@ -633,56 +587,6 @@ public class Game {
 
         System.out.println("更新分數 - " + player1.getName() + ": " + player1Hits
                 + " - " + player2.getName() + ": " + player2Hits);
-    }
-
-    private void updateHealthBars() {
-        Platform.runLater(() -> {
-            double p1Health = Math.max(0, player1.getHealth()) / 100.0;
-            double p2Health = Math.max(0, player2.getHealth()) / 100.0;
-
-            player1HealthBar.setProgress(p1Health);
-            player2HealthBar.setProgress(p2Health);
-
-            // 根據血量改變顏色和效果
-            if (p1Health < 0.3) {
-                player1HealthBar.setStyle(
-                        "-fx-accent: darkblue;"
-                        + "-fx-background-color: rgba(0,0,0,0.5);"
-                        + "-fx-background-radius: 5;"
-                        + "-fx-background-insets: 0;"
-                        + "-fx-padding: 2;"
-                        + "-fx-effect: dropshadow(gaussian, rgba(0,0,255,0.3), 10, 0, 0, 2);"
-                );
-            } else {
-                player1HealthBar.setStyle(
-                        "-fx-accent: blue;"
-                        + "-fx-background-color: rgba(0,0,0,0.5);"
-                        + "-fx-background-radius: 5;"
-                        + "-fx-background-insets: 0;"
-                        + "-fx-padding: 2;"
-                        + "-fx-effect: dropshadow(gaussian, rgba(0,0,255,0.5), 5, 0, 0, 1);"
-                );
-            }
-            if (p2Health < 0.3) {
-                player2HealthBar.setStyle(
-                        "-fx-accent: darkred;"
-                        + "-fx-background-color: rgba(0,0,0,0.5);"
-                        + "-fx-background-radius: 5;"
-                        + "-fx-background-insets: 0;"
-                        + "-fx-padding: 2;"
-                        + "-fx-effect: dropshadow(gaussian, rgba(255,0,0,0.3), 10, 0, 0, 2);"
-                );
-            } else {
-                player2HealthBar.setStyle(
-                        "-fx-accent: red;"
-                        + "-fx-background-color: rgba(0,0,0,0.5);"
-                        + "-fx-background-radius: 5;"
-                        + "-fx-background-insets: 0;"
-                        + "-fx-padding: 2;"
-                        + "-fx-effect: dropshadow(gaussian, rgba(255,0,0,0.5), 5, 0, 0, 1);"
-                );
-            }
-        });
     }
 
     private void checkGameOver() {

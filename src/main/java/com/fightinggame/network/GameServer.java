@@ -39,11 +39,11 @@ public class GameServer {
         try {
             // Try using specified port, find available port if fails
             try {
-                serverSocket = new ServerSocket(port);
+                serverSocket = new ServerSocket(port, 0, null);
             } catch (IOException e) {
                 System.out.println("Port " + port + " is in use, trying to find available port...");
                 port = findAvailablePort();
-                serverSocket = new ServerSocket(port);
+                serverSocket = new ServerSocket(port, 0, null);
                 System.out.println("Using port: " + port);
             }
 
