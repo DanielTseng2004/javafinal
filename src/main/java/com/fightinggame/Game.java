@@ -16,6 +16,7 @@ import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.geometry.Bounds;
 import javafx.scene.Scene;
+import javafx.scene.control.Button;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
@@ -34,6 +35,7 @@ public class Game {
     private static final double MOVE_SPEED = 5;
     private static final int MAX_RECONNECT_ATTEMPTS = 5;
     private static final int RECONNECT_DELAY_MS = 2000;
+    private static final int ATTACK_SCORE_COOLDOWN = 1000; // 攻擊得分冷卻時間（毫秒）
 
     private Pane root;
     private Player player1;
@@ -45,12 +47,15 @@ public class Game {
     private Text scoreText;
     private Text gameOverText;
     private Text connectionStatusText;
+    private Button restartButton;
     private ScheduledExecutorService reconnectExecutor;
     private int reconnectAttempts = 0;
     private String serverAddress;
     private int serverPort;
     private int player1Hits = 0;
     private int player2Hits = 0;
+    private long lastPlayer1ScoreTime = 0;
+    private long lastPlayer2ScoreTime = 0;
 
     public Game(boolean isHost, String serverAddress, int serverPort) {
         this.isHost = isHost;
@@ -127,6 +132,20 @@ public class Game {
         );
         gameOverText.setVisible(false);
         root.getChildren().add(gameOverText);
+
+        // 重新開始按鈕
+        restartButton = new Button("重新開始");
+        restartButton.setStyle(
+                "-fx-background-color: #4CAF50;"
+                + "-fx-text-fill: white;"
+                + "-fx-font-size: 20px;"
+                + "-fx-padding: 10 20;"
+                + "-fx-background-radius: 5;"
+                + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 5, 0, 0, 1);"
+        );
+        restartButton.setVisible(false);
+        restartButton.setOnAction(e -> restartGame());
+        root.getChildren().add(restartButton);
 
         // 連接狀態
         connectionStatusText = new Text();
@@ -322,29 +341,49 @@ public class Game {
                 System.out.println("是否為本地玩家攻擊：" + isLocalPlayer);
 
                 if (isLocalPlayer) {
-                    // 更新命中次數，每次只加一分
+                    long currentTime = System.currentTimeMillis();
+                    boolean canScore = false;
+
+                    // 檢查攻擊者是否可以得分
                     if (attacker == player1) {
-                        player1Hits++;
-                        System.out.println("Player 1 得分！當前分數：" + player1Hits);
+                        if (currentTime - lastPlayer1ScoreTime >= ATTACK_SCORE_COOLDOWN) {
+                            canScore = true;
+                            lastPlayer1ScoreTime = currentTime;
+                        }
                     } else {
-                        player2Hits++;
-                        System.out.println("Player 2 得分！當前分數：" + player2Hits);
+                        if (currentTime - lastPlayer2ScoreTime >= ATTACK_SCORE_COOLDOWN) {
+                            canScore = true;
+                            lastPlayer2ScoreTime = currentTime;
+                        }
                     }
 
-                    // 立即更新UI
-                    Platform.runLater(() -> {
-                        updateScore();
-                        checkGameOver();
-                    });
+                    if (canScore) {
+                        // 更新命中次數，每次只加一分
+                        if (attacker == player1) {
+                            player1Hits++;
+                            System.out.println("Player 1 得分！當前分數：" + player1Hits);
+                        } else {
+                            player2Hits++;
+                            System.out.println("Player 2 得分！當前分數：" + player2Hits);
+                        }
 
-                    // 發送網路同步消息
-                    if (gameClient != null && gameClient.isConnected()) {
-                        GameMessage scoreMessage = new GameMessage(
-                                GameMessage.MessageType.GAME_STATE,
-                                new int[]{player1Hits, player2Hits},
-                                isHost ? 1 : 2
-                        );
-                        gameClient.sendMessage(scoreMessage);
+                        // 立即更新UI
+                        Platform.runLater(() -> {
+                            updateScore();
+                            checkGameOver();
+                        });
+
+                        // 發送網路同步消息
+                        if (gameClient != null && gameClient.isConnected()) {
+                            GameMessage scoreMessage = new GameMessage(
+                                    GameMessage.MessageType.GAME_STATE,
+                                    new int[]{player1Hits, player2Hits},
+                                    isHost ? 1 : 2
+                            );
+                            gameClient.sendMessage(scoreMessage);
+                        }
+                    } else {
+                        System.out.println("攻擊冷卻中，無法得分");
                     }
                 }
             }
@@ -503,36 +542,56 @@ public class Game {
             if (attackBounds.intersects(targetBounds)) {
                 System.out.println("攻擊命中！");
 
-                // 更新命中次數，每次只加一分
+                long currentTime = System.currentTimeMillis();
+                boolean canScore = false;
+
+                // 檢查攻擊者是否可以得分
                 if (message.getPlayerId() == 1) {
-                    player1Hits++;
-                    System.out.println("Player 1 得分！當前分數：" + player1Hits);
+                    if (currentTime - lastPlayer1ScoreTime >= ATTACK_SCORE_COOLDOWN) {
+                        canScore = true;
+                        lastPlayer1ScoreTime = currentTime;
+                    }
                 } else {
-                    player2Hits++;
-                    System.out.println("Player 2 得分！當前分數：" + player2Hits);
+                    if (currentTime - lastPlayer2ScoreTime >= ATTACK_SCORE_COOLDOWN) {
+                        canScore = true;
+                        lastPlayer2ScoreTime = currentTime;
+                    }
                 }
 
-                // 立即更新UI和同步到後端
-                Platform.runLater(() -> {
-                    updateScore();
-                    checkGameOver();
+                if (canScore) {
+                    // 更新命中次數，每次只加一分
+                    if (message.getPlayerId() == 1) {
+                        player1Hits++;
+                        System.out.println("Player 1 得分！當前分數：" + player1Hits);
+                    } else {
+                        player2Hits++;
+                        System.out.println("Player 2 得分！當前分數：" + player2Hits);
+                    }
 
-                    // 發送分數更新到後端
-                    GameMessage scoreMessage = new GameMessage(
-                            GameMessage.MessageType.GAME_STATE,
-                            new int[]{player1Hits, player2Hits},
-                            isHost ? 1 : 2
+                    // 立即更新UI和同步到後端
+                    Platform.runLater(() -> {
+                        updateScore();
+                        checkGameOver();
+
+                        // 發送分數更新到後端
+                        GameMessage scoreMessage = new GameMessage(
+                                GameMessage.MessageType.GAME_STATE,
+                                new int[]{player1Hits, player2Hits},
+                                isHost ? 1 : 2
+                        );
+                        gameClient.sendMessage(scoreMessage);
+                    });
+
+                    // 發送傷害同步消息
+                    GameMessage damageMessage = new GameMessage(
+                            GameMessage.MessageType.PLAYER_DAMAGE,
+                            1, // 傷害值固定為1
+                            target == player1 ? 1 : 2 // 標記受傷的玩家ID
                     );
-                    gameClient.sendMessage(scoreMessage);
-                });
-
-                // 發送傷害同步消息
-                GameMessage damageMessage = new GameMessage(
-                        GameMessage.MessageType.PLAYER_DAMAGE,
-                        1, // 傷害值固定為1
-                        target == player1 ? 1 : 2 // 標記受傷的玩家ID
-                );
-                gameClient.sendMessage(damageMessage);
+                    gameClient.sendMessage(damageMessage);
+                } else {
+                    System.out.println("攻擊冷卻中，無法得分");
+                }
             }
         });
     }
@@ -589,6 +648,40 @@ public class Game {
                 + " - " + player2.getName() + ": " + player2Hits);
     }
 
+    private void restartGame() {
+        // 重置分數
+        player1Hits = 0;
+        player2Hits = 0;
+        lastPlayer1ScoreTime = 0;
+        lastPlayer2ScoreTime = 0;
+
+        // 重置玩家位置
+        player1.setX(WINDOW_WIDTH * 0.25);
+        player1.setY(WINDOW_HEIGHT - 200);
+        player2.setX(WINDOW_WIDTH * 0.75);
+        player2.setY(WINDOW_HEIGHT - 200);
+
+        // 重置UI
+        gameOverText.setVisible(false);
+        restartButton.setVisible(false);
+        updateScore();
+
+        // 重新開始遊戲循環
+        if (gameLoop != null) {
+            gameLoop.start();
+        }
+
+        // 發送重置消息給對方玩家
+        if (gameClient != null && gameClient.isConnected()) {
+            GameMessage resetMessage = new GameMessage(
+                    GameMessage.MessageType.GAME_STATE,
+                    new int[]{0, 0},
+                    isHost ? 1 : 2
+            );
+            gameClient.sendMessage(resetMessage);
+        }
+    }
+
     private void checkGameOver() {
         if (player1Hits >= 10 || player2Hits >= 10) {
             String winner = player1Hits >= 10 ? player1.getName() : player2.getName();
@@ -596,6 +689,11 @@ public class Game {
             gameOverText.setX((WINDOW_WIDTH - gameOverText.getLayoutBounds().getWidth()) / 2);
             gameOverText.setY(WINDOW_HEIGHT / 2);
             gameOverText.setVisible(true);
+
+            // 顯示重新開始按鈕
+            restartButton.setLayoutX((WINDOW_WIDTH - restartButton.getWidth()) / 2);
+            restartButton.setLayoutY(WINDOW_HEIGHT / 2 + 60);
+            restartButton.setVisible(true);
 
             // 添加獲勝特效
             gameOverText.setStyle(
